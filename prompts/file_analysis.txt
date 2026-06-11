@@ -1,0 +1,15 @@
+Review the following diff from a pull request.
+
+File: {file_path}
+Language: {language}
+Chunk: {chunk_number} of {total_chunks}
+
+If the total number of chunks is greater than 1, you are seeing a partial view of a larger change. Focus only on this specific chunk: judge what is visible here and do not guess about code you cannot see. Do not re-report issues that belong to other chunks.
+
+The diff is in unified format. Lines starting with + were added, lines starting with - were removed, and lines starting with a space are unchanged context. Hunk headers like @@ -a,b +c,d @@ give the line numbering in the new version of the file.
+
+Diff content:
+
+{diff_content}
+
+Call report_code_issue once for every real bug, security problem, performance problem, error-handling gap, or significant style issue in the added or modified lines above. Use line numbers as they appear in the new version of the file. If there are no real issues in this chunk, do not call the tool.
