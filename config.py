@@ -58,7 +58,7 @@ CATEGORIES: tuple[str, ...] = (
 )
 
 # --- LLM ---
-ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-fable-5")
+ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 LLM_MAX_TOKENS: int = 4096
 LLM_RETRY_DELAYS: tuple[float, ...] = (2.0, 4.0, 8.0)
 
