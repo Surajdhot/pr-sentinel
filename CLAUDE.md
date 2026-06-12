@@ -2,9 +2,10 @@
 
 ## Project identity
 PR Sentinel is an autonomous AI code reviewer. When a GitHub pull request
-is opened, it fetches the diff, analyzes each changed file using Claude
-with tool use, detects real bugs and security issues, and posts inline
-review comments directly on the PR via the GitHub API.
+is opened, it fetches the diff, analyzes each changed file using Groq
+(Llama 3.3) with structured JSON output, detects real bugs and security
+issues, and posts inline review comments directly on the PR via the
+GitHub API.
 
 ## Code style rules
 - Python only. No JavaScript backend.
@@ -19,13 +20,13 @@ review comments directly on the PR via the GitHub API.
 ## Architecture decisions — do not change these
 - Agent logic lives in agents/ directory only.
 - All GitHub API calls live in github_client.py only.
-- All LLM (Claude) calls live in llm_client.py only.
-- No direct anthropic or httpx calls anywhere else in the codebase.
+- All LLM calls live in llm_client.py only.
+- No direct groq or httpx calls anywhere else in the codebase.
 - All prompts live in prompts/ as .txt files — never hardcoded in Python.
 - Configuration comes from .env via python-dotenv — no hardcoded secrets.
 
 ## What NOT to do
-- Do not use LangChain — use the raw Anthropic Python SDK with tool use.
+- Do not use LangChain — use the raw Groq Python SDK.
 - Do not create any frontend — CLI and webhook only.
 - Do not add unnecessary dependencies.
 - Do not write placeholder, stub, or TODO code — everything must be
