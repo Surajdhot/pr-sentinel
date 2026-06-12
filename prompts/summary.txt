@@ -12,4 +12,4 @@ Issues found by the review, as JSON:
 
 Write a 2-3 sentence plain English summary of what this pull request does, based on the title, description and issues above. Then, on a new line starting with "Most important:", name the single most important issue to fix and why. If no significant issues were found, say so on that line instead.
 
-Reply with plain text only — no headings, no code fences, no tool calls.
+Reply with plain text only — no headings, no code fences, no JSON.

@@ -19,7 +19,7 @@ CATEGORY_LABELS: dict[str, str] = {
     "error_handling": "Error handling",
 }
 
-_FOOTER = "*Reviewed by PR Sentinel — powered by Claude*"
+_FOOTER = "*Reviewed by PR Sentinel — powered by Llama 3.3 (Groq)*"
 
 
 def _issue_body(issue: CodeIssue) -> str:

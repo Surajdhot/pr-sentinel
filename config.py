@@ -34,12 +34,12 @@ def _env_int(name: str, default: int) -> int:
 
 
 # --- Credentials (presence checked by validate_config at startup) ---
-ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY")
+GROQ_API_KEY: str | None = os.getenv("GROQ_API_KEY")
 GITHUB_TOKEN: str | None = os.getenv("GITHUB_TOKEN")
 GITHUB_WEBHOOK_SECRET: str | None = os.getenv("GITHUB_WEBHOOK_SECRET")
 TARGET_REPO: str | None = os.getenv("TARGET_REPO")
 
-REQUIRED_ENV_VARS: tuple[str, ...] = ("ANTHROPIC_API_KEY", "GITHUB_TOKEN")
+REQUIRED_ENV_VARS: tuple[str, ...] = ("GROQ_API_KEY", "GITHUB_TOKEN")
 
 # --- Review limits ---
 MAX_FILES_PER_PR: int = _env_int("MAX_FILES_PER_PR", 20)
@@ -57,9 +57,10 @@ CATEGORIES: tuple[str, ...] = (
     "error_handling",
 )
 
-# --- LLM ---
-ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+# --- LLM (Groq) ---
+GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 LLM_MAX_TOKENS: int = 4096
+LLM_TEMPERATURE: float = 0.2
 LLM_RETRY_DELAYS: tuple[float, ...] = (2.0, 4.0, 8.0)
 
 # --- GitHub API ---
