@@ -58,9 +58,7 @@ CATEGORIES: tuple[str, ...] = (
 )
 
 # --- LLM ---
-# claude-sonnet-4-20250514 is deprecated by Anthropic (retires 2026-06-15);
-# override with ANTHROPIC_MODEL=claude-sonnet-4-6 without a code change.
-ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-fable-5")
 LLM_MAX_TOKENS: int = 4096
 LLM_RETRY_DELAYS: tuple[float, ...] = (2.0, 4.0, 8.0)
 
