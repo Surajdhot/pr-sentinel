@@ -115,7 +115,9 @@ async def _create_with_retry(context: str, **request_kwargs: Any) -> Any:
 
     Makes one initial attempt plus one retry per delay in
     config.LLM_RETRY_DELAYS (2s/4s/8s). Raises ReviewFailedError once all
-    attempts are exhausted.
+    attempts are exhausted, or immediately when the model returns a
+    refusal stop reason — claude-fable-5 can decline a request with HTTP
+    200 and empty content, and retrying the same request will not help.
     """
     last_error: Exception | None = None
     for attempt, delay in enumerate((0.0, *config.LLM_RETRY_DELAYS)):
@@ -129,10 +131,14 @@ async def _create_with_retry(context: str, **request_kwargs: Any) -> Any:
             )
             await asyncio.sleep(delay)
         try:
-            return await _get_client().messages.create(**request_kwargs)
+            message = await _get_client().messages.create(**request_kwargs)
         except anthropic.APIError as exc:
             last_error = exc
             logger.error("Claude call failed for %s: %s", context, exc)
+            continue
+        if getattr(message, "stop_reason", None) == "refusal":
+            raise ReviewFailedError(context, "the model refused this request")
+        return message
     raise ReviewFailedError(context, str(last_error))
 
 
