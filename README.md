@@ -47,7 +47,7 @@ cp .env.example .env   # then fill in your keys
 | `TARGET_REPO` | no | Default repo hint (`owner/repo`) |
 | `MAX_FILES_PER_PR` | no | Max files reviewed per PR (default 20) |
 | `MAX_LINES_PER_CHUNK` | no | Max diff lines per LLM call (default 500) |
-| `ANTHROPIC_MODEL` | no | Defaults to `claude-sonnet-4-20250514`. **That model is deprecated and retires 2026-06-15** — set `ANTHROPIC_MODEL=claude-sonnet-4-6` to upgrade without a code change. |
+| `ANTHROPIC_MODEL` | no | Claude model used for reviews (default `claude-fable-5`) |
 | `LOG_LEVEL` | no | Logging level (default `INFO`) |
 
 ## Usage
