@@ -100,13 +100,18 @@ def split_diff_into_chunks(patch: str, max_lines: int | None = None) -> list[str
 
 
 async def analyze(
-    owner: str, repo: str, pr_number: int, file_info: dict[str, Any]
+    owner: str,
+    repo: str,
+    pr_number: int,
+    file_info: dict[str, Any],
+    dry_run: bool = False,
 ) -> list[CodeIssue]:
     """Analyse one changed file and return all issues found in it.
 
     Splits the diff into chunks, sends each chunk to the LLM, and on a
-    ReviewFailedError posts a failure notice on the PR and returns whatever
-    was collected from earlier chunks.
+    ReviewFailedError returns whatever was collected from earlier chunks.
+    Outside dry-run mode a failure also posts a notice on the PR; in
+    dry-run nothing is posted to GitHub.
     """
     filename = file_info.get("filename", "")
     patch = file_info.get("patch") or ""
@@ -123,6 +128,9 @@ async def analyze(
             )
         except ReviewFailedError as exc:
             logger.error("Analysis failed for %s: %s", filename, exc)
-            await github_client.post_failed_review(owner, repo, pr_number, filename)
+            if dry_run:
+                logger.info("Dry run — not posting failure notice for %s", filename)
+            else:
+                await github_client.post_failed_review(owner, repo, pr_number, filename)
             break
     return issues

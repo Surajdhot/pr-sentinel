@@ -126,6 +126,27 @@ async def test_review_failed_error_posts_failure_notice(mocker: Any) -> None:
 
 
 @pytest.mark.asyncio
+async def test_review_failed_error_dry_run_skips_failure_notice(mocker: Any) -> None:
+    """In dry-run a ReviewFailedError must not post anything to GitHub."""
+    mocker.patch(
+        "agents.file_analyzer.llm_client.analyze_file",
+        AsyncMock(side_effect=ReviewFailedError("app.py")),
+    )
+    post_failed = mocker.patch(
+        "agents.file_analyzer.github_client.post_failed_review", AsyncMock()
+    )
+    file_info = {
+        "filename": "app.py",
+        "status": "modified",
+        "patch": "+x = 1",
+        "changes": 1,
+    }
+    issues = await file_analyzer.analyze("octo", "demo", 7, file_info, dry_run=True)
+    assert issues == []
+    post_failed.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_analyze_collects_issues_from_chunks(mocker: Any) -> None:
     """analyze forwards each chunk to the LLM and gathers all findings."""
     issue = make_issue()

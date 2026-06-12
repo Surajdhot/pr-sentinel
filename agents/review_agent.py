@@ -103,7 +103,11 @@ async def run_review(
     selected = select_files(files)
     issues: list[CodeIssue] = []
     for file_info in selected:
-        issues.extend(await file_analyzer.analyze(owner, repo, pr_number, file_info))
+        issues.extend(
+            await file_analyzer.analyze(
+                owner, repo, pr_number, file_info, dry_run=dry_run
+            )
+        )
     issues = deduplicate_issues(issues)
     score = calculate_score(issues)
     overview = await _safe_summary(issues, pr)
