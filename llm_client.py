@@ -304,3 +304,43 @@ async def generate_summary(
         ],
     )
     return (response.choices[0].message.content or "").strip()
+
+
+async def generate_synthesis_narrative(
+    issues: list[CodeIssue],
+    disagreements: list[dict[str, Any]],
+    reviewer_status: dict[str, bool],
+    pr_metadata: dict[str, Any],
+) -> str:
+    """Generate the plain-English overview of the synthesised review.
+
+    The narrative is prose only — the final issue list is merged
+    deterministically in agents/synthesis.py and is never edited by the
+    model, so line numbers and severities stay exactly as reported.
+
+    Raises:
+        ReviewFailedError: If the API call fails after all retries.
+    """
+    status = ", ".join(
+        f"{name}: {'completed' if ok else 'FAILED'}"
+        for name, ok in reviewer_status.items()
+    )
+    prompt = _load_prompt("synthesis").format(
+        pr_title=pr_metadata.get("title", ""),
+        pr_description=pr_metadata.get("body") or "(no description)",
+        total_files=pr_metadata.get("changed_files", 0),
+        reviewer_status=status or "(no reviewers ran)",
+        issues_json=json.dumps([issue.to_dict() for issue in issues], indent=2),
+        disagreements_json=json.dumps(disagreements, indent=2),
+    )
+    response = await _create_with_retry(
+        "synthesis narrative",
+        model=config.GROQ_MODEL,
+        max_tokens=config.LLM_MAX_TOKENS,
+        temperature=config.LLM_TEMPERATURE,
+        messages=[
+            {"role": "system", "content": _load_prompt("system_prompt")},
+            {"role": "user", "content": prompt},
+        ],
+    )
+    return (response.choices[0].message.content or "").strip()
