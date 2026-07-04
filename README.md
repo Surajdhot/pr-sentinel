@@ -1,35 +1,53 @@
 # PR Sentinel
 
 PR Sentinel is an autonomous AI code reviewer for GitHub. When a pull request
-is opened or updated, it fetches the diff, analyzes each changed file with
-Groq's Llama 3.3 (structured JSON output), detects real bugs and security
-issues, and posts a scored review with inline comments directly on the PR.
+is opened or updated, three focused reviewers — security, style & quality,
+and architecture — independently analyze the diff with Groq's Llama 3.3
+(structured JSON output), a synthesis step merges their findings into one
+coherent review, and the result is posted as a scored GitHub review with
+inline comments.
 
 ## How it works
 
 ```
 GitHub webhook ──▶ webhook.py ──▶ agents/review_agent.py
                                        │
+                          agents/reviewers.py (concurrent)
                         ┌──────────────┼────────────────┐
                         ▼              ▼                ▼
-              agents/file_analyzer  llm_client    agents/comment_builder
-              (smart diff chunking) (Groq /       (GitHub review format)
-                        │            Llama 3.3)          │
-                        └──────▶ github_client.py ◀─────┘
-                                 (post review)
+                   security       style/quality    architecture
+                   reviewer         reviewer         reviewer
+                        │              │                │
+                        └──── llm_client (Groq) ────────┘
+                                       │
+                            agents/synthesis.py
+                        (deterministic merge + conflicts)
+                                       │
+                          agents/comment_builder.py
+                                       │
+                              github_client.py
+                                (post review)
 ```
 
 1. A `pull_request` webhook (or the CLI) triggers a review.
 2. Changed files are fetched; deleted, binary, and >10,000-line files are
    skipped, and only the 20 largest files are reviewed on huge PRs.
-3. Each file's diff is split into ≤500-line chunks at function/class
-   boundaries (falling back to blank lines) and sent to Llama 3.3 on Groq,
-   which returns its findings as a JSON object.
-4. Findings are deduplicated (same file + line + category keeps the higher
-   severity), scored, formatted, and posted as a GitHub review with inline
-   comments and a summary table.
+3. Each enabled reviewer independently analyzes every file's diff (split
+   into ≤500-line chunks at function/class boundaries) with its own system
+   prompt and category focus. Reviewers run concurrently; each returns
+   findings as JSON.
+4. Synthesis merges the findings deterministically: identical findings
+   collapse (highest severity wins, all reviewers credited); conflicting
+   same-line findings are both kept and listed under "Reviewers disagreed".
+   One LLM call writes the prose overview — it never edits the issue list.
+5. The merged review is scored, formatted, and posted with inline comments,
+   a summary table, and reviewer attribution. If a reviewer fails, the
+   review posts anyway marked "partial"; only if all fail does the bot post
+   a failure notice instead.
 
 **Scoring:** `100 − (critical×25 + high×10 + medium×5 + low×1)`, floored at 0.
+
+Design rationale for the pipeline lives in [DECISIONS.md](DECISIONS.md).
 
 ## Setup
 
@@ -47,6 +65,7 @@ cp .env.example .env   # then fill in your keys
 | `TARGET_REPO` | no | Default repo hint (`owner/repo`) |
 | `MAX_FILES_PER_PR` | no | Max files reviewed per PR (default 20) |
 | `MAX_LINES_PER_CHUNK` | no | Max diff lines per LLM call (default 500) |
+| `ENABLED_REVIEWERS` | no | Comma list of reviewers to run (default `security,style,architecture`) |
 | `GROQ_MODEL` | no | Groq model used for reviews (default `llama-3.3-70b-versatile`) |
 | `LOG_LEVEL` | no | Logging level (default `INFO`) |
 
