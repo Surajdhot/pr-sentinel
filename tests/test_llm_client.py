@@ -165,3 +165,39 @@ async def test_generate_summary_returns_text(mocker: Any) -> None:
     assert "This PR adds a feature." in text
     kwargs = fake.chat.completions.create.await_args.kwargs
     assert "response_format" not in kwargs  # summary is free-form text, not JSON
+
+
+@pytest.mark.asyncio
+async def test_synthesis_narrative_is_free_form_and_fully_templated(
+    mocker: Any,
+) -> None:
+    """The narrative call sends prose context, not JSON mode, to the model."""
+    fake = fake_groq_client(groq_response("Solid PR. Most important: rotate the key."))
+    mocker.patch("llm_client._get_client", return_value=fake)
+    issue = llm_client.CodeIssue(
+        file="config_loader.py",
+        line=12,
+        severity="critical",
+        category="security",
+        title="Live API key committed",
+        explanation="x",
+        suggestion="y",
+        reviewer="security",
+    )
+    disagreements = [{"file": "config_loader.py", "line": 12, "issues": []}]
+    text = await llm_client.generate_synthesis_narrative(
+        [issue],
+        disagreements,
+        {"security": True, "style": False},
+        {"title": "Add config loader", "body": None, "changed_files": 1},
+    )
+    assert text == "Solid PR. Most important: rotate the key."
+    kwargs = fake.chat.completions.create.await_args.kwargs
+    assert "response_format" not in kwargs  # narrative is free-form text
+    user_message = kwargs["messages"][1]["content"]
+    assert "security: completed, style: FAILED" in user_message
+    assert "Live API key committed" in user_message
+    assert '"line": 12' in user_message
+    assert "(no description)" in user_message
+    assert "{pr_title}" not in user_message  # every placeholder was filled
+    assert "{issues_json}" not in user_message

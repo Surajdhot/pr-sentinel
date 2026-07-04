@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from agents.reviewers import ReviewerResult
 from llm_client import CodeIssue
 
 
@@ -64,6 +65,44 @@ def fake_groq_client(
     create = AsyncMock(side_effect=error) if error else AsyncMock(return_value=response)
     client.chat.completions.create = create
     return client
+
+
+def disagreement_results() -> list[ReviewerResult]:
+    """Reviewer outputs that legitimately disagree about one line.
+
+    Style reads config_loader.py line 12 as a low-severity hardcoded
+    literal; security reads the same line as a critical committed secret.
+    Architecture found nothing. Matches the secret_diff fixture.
+    """
+    style_issue = make_issue(
+        severity="low",
+        file="config_loader.py",
+        line=12,
+        category="style",
+        title="Hardcoded string literal",
+        explanation="The fallback key should be a named module-level constant.",
+        suggestion='DEFAULT_API_KEY = "..." at module top',
+        reviewer="style",
+    )
+    security_issue = make_issue(
+        severity="critical",
+        file="config_loader.py",
+        line=12,
+        category="security",
+        title="Live API key committed to source",
+        explanation="A production secret is hardcoded and now in git history.",
+        suggestion="Load the key from the environment and rotate it now.",
+        reviewer="security",
+    )
+    return [
+        ReviewerResult(
+            name="security", display_name="Security", issues=[security_issue]
+        ),
+        ReviewerResult(
+            name="style", display_name="Style & Quality", issues=[style_issue]
+        ),
+        ReviewerResult(name="architecture", display_name="Architecture", issues=[]),
+    ]
 
 
 @pytest.fixture()
