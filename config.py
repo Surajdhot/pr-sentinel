@@ -10,6 +10,7 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 from dotenv import load_dotenv
 
@@ -31,6 +32,32 @@ def _env_int(name: str, default: int) -> int:
         raise ConfigError(
             f"Environment variable {name} must be an integer, got {raw!r}"
         ) from exc
+
+
+def _env_csv(
+    name: str, allowed: tuple[str, ...], default: tuple[str, ...]
+) -> tuple[str, ...]:
+    """Read a comma-separated environment variable, validating each entry.
+
+    Args:
+        name: Environment variable name.
+        allowed: The values entries are permitted to take.
+        default: Value returned when the variable is unset or blank.
+
+    Raises:
+        ConfigError: If any entry is not in the allowed set.
+    """
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    values = tuple(item.strip() for item in raw.split(",") if item.strip())
+    unknown = [value for value in values if value not in allowed]
+    if unknown:
+        raise ConfigError(
+            f"Environment variable {name} contains unknown values: "
+            f"{', '.join(unknown)}. Allowed: {', '.join(allowed)}"
+        )
+    return values
 
 
 # --- Credentials (presence checked by validate_config at startup) ---
@@ -55,7 +82,54 @@ CATEGORIES: tuple[str, ...] = (
     "performance",
     "style",
     "error_handling",
+    "architecture",
+    "testing",
 )
+
+
+# --- Reviewers (multi-agent pipeline) ---
+class ReviewerSpec(NamedTuple):
+    """Definition of one focused reviewer in the multi-agent pipeline."""
+
+    name: str
+    display_name: str
+    system_prompt: str
+    categories: tuple[str, ...]
+    default_category: str
+
+
+REVIEWERS: tuple[ReviewerSpec, ...] = (
+    ReviewerSpec(
+        name="security",
+        display_name="Security",
+        system_prompt="security_system",
+        categories=("security", "bug", "error_handling"),
+        default_category="security",
+    ),
+    ReviewerSpec(
+        name="style",
+        display_name="Style & Quality",
+        system_prompt="style_system",
+        categories=("style", "testing", "error_handling"),
+        default_category="style",
+    ),
+    ReviewerSpec(
+        name="architecture",
+        display_name="Architecture",
+        system_prompt="architecture_system",
+        categories=("architecture", "performance", "bug"),
+        default_category="architecture",
+    ),
+)
+
+REVIEWER_NAMES: tuple[str, ...] = tuple(spec.name for spec in REVIEWERS)
+ENABLED_REVIEWERS: tuple[str, ...] = _env_csv(
+    "ENABLED_REVIEWERS", allowed=REVIEWER_NAMES, default=REVIEWER_NAMES
+)
+
+# Severity-rank distance at which two same-line findings count as a
+# disagreement between reviewers rather than a duplicate.
+DISAGREEMENT_SEVERITY_GAP: int = 2
 
 # --- LLM (Groq) ---
 GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")

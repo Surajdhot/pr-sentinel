@@ -17,6 +17,8 @@ CATEGORY_LABELS: dict[str, str] = {
     "performance": "Performance",
     "style": "Style",
     "error_handling": "Error handling",
+    "architecture": "Architecture",
+    "testing": "Test coverage",
 }
 
 _FOOTER = "*Reviewed by PR Sentinel — powered by Llama 3.3 (Groq)*"
