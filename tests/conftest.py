@@ -25,6 +25,7 @@ def make_issue(
     title: str = "",
     explanation: str = "Something is wrong here.",
     suggestion: str = "Fix it like this.",
+    reviewer: str = "",
 ) -> CodeIssue:
     """Build a CodeIssue with sensible defaults for tests."""
     return CodeIssue(
@@ -35,6 +36,7 @@ def make_issue(
         title=title or f"{severity} {category} issue",
         explanation=explanation,
         suggestion=suggestion,
+        reviewer=reviewer,
     )
 
 
