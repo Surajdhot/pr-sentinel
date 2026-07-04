@@ -1,8 +1,9 @@
 """Top-level review orchestration for PR Sentinel.
 
-Coordinates the full pipeline for one pull request: fetch metadata and
-files, filter and cap the file list, analyse each file, deduplicate and
-score the findings, then format and post the review.
+Coordinates the multi-agent pipeline for one pull request: fetch metadata
+and files, filter and cap the file list, run every enabled focused
+reviewer independently, synthesize their findings deterministically,
+score the merged result, then format and post the review.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from typing import Any
 import config
 import github_client
 import llm_client
-from agents import comment_builder, file_analyzer
+from agents import comment_builder, file_analyzer, reviewers, synthesis
 from llm_client import CodeIssue, ReviewFailedError
 
 logger = logging.getLogger(__name__)
@@ -29,24 +30,6 @@ def calculate_score(issues: list[CodeIssue]) -> int:
         config.SEVERITY_WEIGHTS.get(issue.severity, 0) for issue in issues
     )
     return max(0, 100 - penalty)
-
-
-def deduplicate_issues(issues: list[CodeIssue]) -> list[CodeIssue]:
-    """Collapse duplicate findings on the same file, line and category.
-
-    When duplicates exist, the issue with the higher severity weight wins.
-    Input order is preserved for the surviving issues.
-    """
-    best: dict[tuple[str, int, str], CodeIssue] = {}
-    for issue in issues:
-        key = (issue.file, issue.line, issue.category)
-        current = best.get(key)
-        if current is None or (
-            config.SEVERITY_WEIGHTS.get(issue.severity, 0)
-            > config.SEVERITY_WEIGHTS.get(current.severity, 0)
-        ):
-            best[key] = issue
-    return list(best.values())
 
 
 def select_files(
@@ -73,56 +56,104 @@ def select_files(
     return sorted(reviewable, key=lambda f: f.get("changes", 0), reverse=True)[:limit]
 
 
-async def _safe_summary(issues: list[CodeIssue], pr: dict[str, Any]) -> str:
+async def _safe_narrative(
+    synth: synthesis.SynthesisResult, pr: dict[str, Any]
+) -> str:
     """Generate the AI overview, falling back to a static line on failure."""
     try:
-        return await llm_client.generate_summary(issues, pr)
+        return await llm_client.generate_synthesis_narrative(
+            synth.issues, synth.disagreements, synth.reviewer_status, pr
+        )
     except ReviewFailedError as exc:
-        logger.error("Summary generation failed, using fallback: %s", exc)
-        return f"Automated review completed with {len(issues)} issue(s) found."
+        logger.error("Narrative generation failed, using fallback: %s", exc)
+        return f"Automated review completed with {len(synth.issues)} issue(s) found."
+
+
+async def _handle_total_failure(
+    owner: str,
+    repo: str,
+    pr_number: int,
+    synth: synthesis.SynthesisResult,
+    dry_run: bool,
+) -> dict[str, Any]:
+    """Report a review in which every reviewer failed; post no review.
+
+    Outside dry-run a failure notice is posted on the PR so the failure
+    is never silent; in dry-run nothing is posted to GitHub.
+    """
+    logger.error(
+        "All reviewers failed for %s/%s#%d — not posting a review",
+        owner,
+        repo,
+        pr_number,
+    )
+    if dry_run:
+        logger.info("Dry run — skipping failure notice")
+    else:
+        await github_client.post_failed_review(
+            owner, repo, pr_number, "this pull request (all reviewers failed)"
+        )
+    return {
+        "score": None,
+        "issues": [],
+        "summary": "",
+        "comments": [],
+        "failed_reviewers": synth.failed_reviewers,
+    }
+
+
+def _review_result(
+    synth: synthesis.SynthesisResult,
+    score: int,
+    summary: str,
+    comments: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Assemble run_review's result dict from the synthesized pieces."""
+    return {
+        "score": score,
+        "issues": synth.issues,
+        "summary": summary,
+        "comments": comments,
+        "failed_reviewers": synth.failed_reviewers,
+    }
 
 
 async def run_review(
     owner: str, repo: str, pr_number: int, dry_run: bool = False
 ) -> dict[str, Any]:
-    """Run the full review pipeline for one pull request.
+    """Run the multi-agent review pipeline for one pull request.
 
-    Args:
-        owner: Repository owner login.
-        repo: Repository name.
-        pr_number: Pull request number.
-        dry_run: When True, analyse but do not post anything to GitHub.
-
-    Returns:
-        A dict with the score, deduplicated issues, summary markdown and
-        the inline comment payloads.
+    Every enabled reviewer analyses the same selected files independently;
+    agents.synthesis merges their findings deterministically before
+    scoring and posting. When only some reviewers fail, the review is
+    still posted with the coverage gap disclosed; when all fail, a
+    failure notice is posted instead (never in dry-run) and the returned
+    score is None.
     """
     logger.info("Starting review of %s/%s#%d (dry_run=%s)", owner, repo, pr_number, dry_run)
     pr = await github_client.get_pull_request(owner, repo, pr_number)
     files = await github_client.get_pr_files(owner, repo, pr_number)
     selected = select_files(files)
-    issues: list[CodeIssue] = []
-    for file_info in selected:
-        issues.extend(
-            await file_analyzer.analyze(
-                owner, repo, pr_number, file_info, dry_run=dry_run
-            )
-        )
-    issues = deduplicate_issues(issues)
-    score = calculate_score(issues)
-    overview = await _safe_summary(issues, pr)
-    summary = comment_builder.build_summary(issues, score, overview)
-    comments = comment_builder.build_inline_comments(issues)
+    results = await reviewers.run_all_reviewers(selected)
+    synth = synthesis.synthesize(results)
+    if results and all(result.failed for result in results):
+        return await _handle_total_failure(owner, repo, pr_number, synth, dry_run)
+    score = calculate_score(synth.issues)
+    overview = await _safe_narrative(synth, pr)
+    summary = comment_builder.build_summary(
+        synth.issues,
+        score,
+        overview,
+        failed_reviewers=synth.failed_reviewers,
+        disagreements=synth.disagreements,
+    )
+    comments = comment_builder.build_inline_comments(synth.issues)
     if dry_run:
         logger.info("Dry run — skipping GitHub post")
     else:
         await github_client.post_review(owner, repo, pr_number, comments, summary, score)
     logger.info(
-        "Review of %s/%s#%d finished: score %d, %d issue(s)",
-        owner,
-        repo,
-        pr_number,
-        score,
-        len(issues),
+        "Review of %s/%s#%d finished: score %d, %d issue(s), %d failed reviewer(s)",
+        owner, repo, pr_number, score, len(synth.issues), len(synth.failed_reviewers),
     )
-    return {"score": score, "issues": issues, "summary": summary, "comments": comments}
+    return _review_result(synth, score, summary, comments)
