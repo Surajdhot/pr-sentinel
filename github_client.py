@@ -183,12 +183,16 @@ async def _post_summary_only_review(path: str, summary: str) -> bool:
 
 
 async def post_failed_review(
-    owner: str, repo: str, pr_number: int, filename: str
+    owner: str, repo: str, pr_number: int, scope: str
 ) -> None:
-    """Post a PR comment noting that analysis failed for one file."""
+    """Post a PR comment noting that analysis failed for the given scope.
+
+    ``scope`` is human-readable — a filename or a phrase like "this pull
+    request (all reviewers failed)".
+    """
     body = (
-        f"⚠️ **PR Sentinel** could not review `{filename}` — analysis failed "
-        "after multiple retries. Please review this file manually."
+        f"⚠️ **PR Sentinel** could not review {scope} — analysis failed "
+        "after multiple retries. Please review manually."
     )
     try:
         await _request(
@@ -197,4 +201,4 @@ async def post_failed_review(
             json_body={"body": body},
         )
     except GitHubClientError as exc:
-        logger.error("Failed to post failure notice for %s: %s", filename, exc)
+        logger.error("Failed to post failure notice for %s: %s", scope, exc)

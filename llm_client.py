@@ -1,8 +1,9 @@
 """Async Groq client for PR Sentinel.
 
 Every LLM call in the project lives in this module, implemented with the
-official groq SDK and Llama 3.3. The reviewer model returns its findings as
-a JSON object, which this module parses into CodeIssue objects.
+official groq SDK and Llama 3.3: one JSON-mode analysis call per focused
+reviewer chunk (parsed into CodeIssue objects) and one free-form call for
+the synthesised review narrative.
 """
 
 from __future__ import annotations
@@ -230,80 +231,6 @@ async def run_reviewer_analysis(
         total_chunks,
     )
     return issues
-
-
-async def analyze_file(
-    file_path: str,
-    file_diff: str,
-    chunk_number: int = 1,
-    total_chunks: int = 1,
-) -> list[CodeIssue]:
-    """Analyse one chunk of a file's diff and return the issues found.
-
-    Args:
-        file_path: Path of the file under review.
-        file_diff: The diff chunk to analyse.
-        chunk_number: 1-based index of this chunk within the file.
-        total_chunks: Total number of chunks the file was split into.
-
-    Raises:
-        ReviewFailedError: If the API call fails after all retries.
-    """
-    prompt = _load_prompt("file_analysis").format(
-        file_path=file_path,
-        language=detect_language(file_path),
-        chunk_number=chunk_number,
-        total_chunks=total_chunks,
-        diff_content=file_diff,
-    )
-    response = await _create_with_retry(
-        file_path,
-        model=config.GROQ_MODEL,
-        max_tokens=config.LLM_MAX_TOKENS,
-        temperature=config.LLM_TEMPERATURE,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": _load_prompt("system_prompt")},
-            {"role": "user", "content": prompt},
-        ],
-    )
-    content = response.choices[0].message.content or "{}"
-    issues = _parse_issues(content, file_path)
-    logger.info(
-        "Model reported %d issue(s) in %s (chunk %d/%d)",
-        len(issues),
-        file_path,
-        chunk_number,
-        total_chunks,
-    )
-    return issues
-
-
-async def generate_summary(
-    all_issues: list[CodeIssue], pr_metadata: dict[str, Any]
-) -> str:
-    """Generate the plain-English PR summary via the model.
-
-    Raises:
-        ReviewFailedError: If the API call fails after all retries.
-    """
-    prompt = _load_prompt("summary").format(
-        pr_title=pr_metadata.get("title", ""),
-        pr_description=pr_metadata.get("body") or "(no description)",
-        total_files=pr_metadata.get("changed_files", 0),
-        issues_json=json.dumps([issue.to_dict() for issue in all_issues], indent=2),
-    )
-    response = await _create_with_retry(
-        "PR summary",
-        model=config.GROQ_MODEL,
-        max_tokens=config.LLM_MAX_TOKENS,
-        temperature=config.LLM_TEMPERATURE,
-        messages=[
-            {"role": "system", "content": _load_prompt("system_prompt")},
-            {"role": "user", "content": prompt},
-        ],
-    )
-    return (response.choices[0].message.content or "").strip()
 
 
 async def generate_synthesis_narrative(

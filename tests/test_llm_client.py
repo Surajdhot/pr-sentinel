@@ -59,39 +59,6 @@ def test_parse_issues_skips_malformed_entries() -> None:
     assert issues[0].line == 5
 
 
-@pytest.mark.asyncio
-async def test_analyze_file_returns_parsed_issues(mocker: Any) -> None:
-    """analyze_file sends the diff to Groq in JSON mode and parses the result."""
-    content = (
-        '{"issues": [{"file": "app.py", "line": 9, "severity": "medium", '
-        '"category": "bug", "title": "Bug", "explanation": "x", "suggestion": "y"}]}'
-    )
-    fake = fake_groq_client(groq_response(content))
-    mocker.patch("llm_client._get_client", return_value=fake)
-    issues = await llm_client.analyze_file("app.py", "@@ -1 +1 @@\n+x = 1")
-    assert len(issues) == 1
-    fake.chat.completions.create.assert_awaited_once()
-    kwargs = fake.chat.completions.create.await_args.kwargs
-    assert kwargs["response_format"] == {"type": "json_object"}
-    assert kwargs["model"] == llm_client.config.GROQ_MODEL
-
-
-@pytest.mark.asyncio
-async def test_api_error_raises_review_failed(mocker: Any) -> None:
-    """Repeated API errors raise ReviewFailedError after exhausting retries."""
-    err = groq.APIConnectionError(
-        request=httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
-    )
-    fake = fake_groq_client(error=err)
-    mocker.patch("llm_client._get_client", return_value=fake)
-    mocker.patch("llm_client.asyncio.sleep", AsyncMock())  # skip backoff delays
-    with pytest.raises(ReviewFailedError):
-        await llm_client.analyze_file("app.py", "@@ -1 +1 @@\n+x = 1")
-    assert fake.chat.completions.create.await_count == 1 + len(
-        llm_client.config.LLM_RETRY_DELAYS
-    )
-
-
 def _issue_dict(spec: config.ReviewerSpec, line: int = 9) -> dict[str, Any]:
     """Build one raw model-issue dict valid for the given reviewer."""
     return {
@@ -154,17 +121,6 @@ async def test_reviewer_analysis_retries_then_fails(mocker: Any) -> None:
     assert fake.chat.completions.create.await_count == 1 + len(
         config.LLM_RETRY_DELAYS
     )
-
-
-@pytest.mark.asyncio
-async def test_generate_summary_returns_text(mocker: Any) -> None:
-    """generate_summary returns the model's plain-text content."""
-    fake = fake_groq_client(groq_response("This PR adds a feature. Most important: none."))
-    mocker.patch("llm_client._get_client", return_value=fake)
-    text = await llm_client.generate_summary([], {"title": "Add feature"})
-    assert "This PR adds a feature." in text
-    kwargs = fake.chat.completions.create.await_args.kwargs
-    assert "response_format" not in kwargs  # summary is free-form text, not JSON
 
 
 @pytest.mark.asyncio
