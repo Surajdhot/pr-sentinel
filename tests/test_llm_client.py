@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import groq
 import httpx
@@ -12,20 +11,7 @@ import pytest
 
 import llm_client
 from llm_client import ReviewFailedError
-
-
-def _response(content: str) -> SimpleNamespace:
-    """Build a fake Groq chat completion wrapping the given content."""
-    message = SimpleNamespace(content=content)
-    return SimpleNamespace(choices=[SimpleNamespace(message=message)])
-
-
-def _fake_client(response: Any = None, error: Exception | None = None) -> MagicMock:
-    """Build a stand-in AsyncGroq client returning a response or raising."""
-    client = MagicMock()
-    create = AsyncMock(side_effect=error) if error else AsyncMock(return_value=response)
-    client.chat.completions.create = create
-    return client
+from tests.conftest import fake_groq_client, groq_response
 
 
 def test_parse_issues_reads_valid_json() -> None:
@@ -79,7 +65,7 @@ async def test_analyze_file_returns_parsed_issues(mocker: Any) -> None:
         '{"issues": [{"file": "app.py", "line": 9, "severity": "medium", '
         '"category": "bug", "title": "Bug", "explanation": "x", "suggestion": "y"}]}'
     )
-    fake = _fake_client(_response(content))
+    fake = fake_groq_client(groq_response(content))
     mocker.patch("llm_client._get_client", return_value=fake)
     issues = await llm_client.analyze_file("app.py", "@@ -1 +1 @@\n+x = 1")
     assert len(issues) == 1
@@ -95,7 +81,7 @@ async def test_api_error_raises_review_failed(mocker: Any) -> None:
     err = groq.APIConnectionError(
         request=httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
     )
-    fake = _fake_client(error=err)
+    fake = fake_groq_client(error=err)
     mocker.patch("llm_client._get_client", return_value=fake)
     mocker.patch("llm_client.asyncio.sleep", AsyncMock())  # skip backoff delays
     with pytest.raises(ReviewFailedError):
@@ -108,7 +94,7 @@ async def test_api_error_raises_review_failed(mocker: Any) -> None:
 @pytest.mark.asyncio
 async def test_generate_summary_returns_text(mocker: Any) -> None:
     """generate_summary returns the model's plain-text content."""
-    fake = _fake_client(_response("This PR adds a feature. Most important: none."))
+    fake = fake_groq_client(groq_response("This PR adds a feature. Most important: none."))
     mocker.patch("llm_client._get_client", return_value=fake)
     text = await llm_client.generate_summary([], {"title": "Add feature"})
     assert "This PR adds a feature." in text
