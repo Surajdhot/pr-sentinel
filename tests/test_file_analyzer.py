@@ -9,20 +9,8 @@ import pytest
 
 import config
 from agents import file_analyzer
-from llm_client import CodeIssue, ReviewFailedError
-
-
-def make_issue(line: int = 3, severity: str = "medium") -> CodeIssue:
-    """Build a CodeIssue with sensible defaults for tests."""
-    return CodeIssue(
-        file="app.py",
-        line=line,
-        severity=severity,
-        category="bug",
-        title="Off-by-one error",
-        explanation="The loop misses the last element.",
-        suggestion="range(len(items))",
-    )
+from llm_client import ReviewFailedError
+from tests.conftest import make_issue
 
 
 def test_file_over_10000_lines_is_skipped() -> None:

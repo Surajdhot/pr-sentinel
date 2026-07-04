@@ -9,24 +9,7 @@ import pytest
 
 from agents import review_agent
 from llm_client import CodeIssue
-
-
-def make_issue(
-    severity: str = "medium",
-    file: str = "app.py",
-    line: int = 10,
-    category: str = "bug",
-) -> CodeIssue:
-    """Build a CodeIssue with sensible defaults for tests."""
-    return CodeIssue(
-        file=file,
-        line=line,
-        severity=severity,
-        category=category,
-        title=f"{severity} {category} issue",
-        explanation="Something is wrong here.",
-        suggestion="Fix it like this.",
-    )
+from tests.conftest import make_file, make_issue
 
 
 def test_calculate_score_applies_severity_weights() -> None:
@@ -66,14 +49,9 @@ def test_deduplicate_keeps_distinct_issues() -> None:
     assert review_agent.deduplicate_issues(issues) == issues
 
 
-def _file(name: str, changes: int) -> dict[str, Any]:
-    """Build a reviewable PR file entry with the given size."""
-    return {"filename": name, "status": "modified", "patch": "+x", "changes": changes}
-
-
 def test_files_beyond_max_files_are_skipped() -> None:
     """Only the largest max_files files survive the cap."""
-    files = [_file(f"f{n}.py", changes=n) for n in range(30)]
+    files = [make_file(f"f{n}.py", changes=n) for n in range(30)]
     selected = review_agent.select_files(files, max_files=20)
     assert len(selected) == 20
     assert all(f["changes"] >= 10 for f in selected)
@@ -82,7 +60,7 @@ def test_files_beyond_max_files_are_skipped() -> None:
 def test_select_files_filters_skippable_entries() -> None:
     """Deleted and binary files never reach the analyzer."""
     files = [
-        _file("keep.py", changes=5),
+        make_file("keep.py", changes=5),
         {"filename": "gone.py", "status": "removed", "patch": "+x", "changes": 5},
         {"filename": "logo.png", "status": "modified", "changes": 5},
     ]
@@ -99,7 +77,7 @@ def _mock_pipeline(mocker: Any, issues: list[CodeIssue]) -> dict[str, AsyncMock]
         ),
         "get_pr_files": mocker.patch(
             "agents.review_agent.github_client.get_pr_files",
-            AsyncMock(return_value=[_file("app.py", changes=3)]),
+            AsyncMock(return_value=[make_file("app.py", changes=3)]),
         ),
         "analyze": mocker.patch(
             "agents.review_agent.file_analyzer.analyze",
