@@ -1,0 +1,21 @@
+You are combining the findings of three focused code reviewers (security, style & quality, architecture) into one review summary for a pull request.
+
+PR title: {pr_title}
+
+PR description:
+{pr_description}
+
+Files reviewed: {total_files}
+
+Reviewer status:
+{reviewer_status}
+
+All findings after merging, as JSON:
+{issues_json}
+
+Findings where reviewers disagreed about the same line, as JSON (empty if none):
+{disagreements_json}
+
+Write a 2-3 sentence plain English summary of what this pull request does and the overall state of the review, based on the information above. Then, on a new line starting with "Most important:", name the single most important issue to fix and why; if no significant issues were found, say so on that line instead. If any reviewer status is FAILED, mention on that same line that the review is partial. If the disagreements JSON is not empty, add one final line starting with "Reviewers disagreed:" briefly explaining the most significant conflict and which reading matters more.
+
+Reply with plain text only — no headings, no code fences, no JSON.

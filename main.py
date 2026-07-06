@@ -55,11 +55,12 @@ def _log_findings(result: dict[str, Any]) -> None:
     """Write dry-run findings to the terminal via the logging module."""
     for issue in result["issues"]:
         logger.info(
-            "[%s] %s:%d (%s) %s — %s",
+            "[%s] %s:%d (%s, flagged by %s) %s — %s",
             issue.severity.upper(),
             issue.file,
             issue.line,
             issue.category,
+            issue.reviewer or "unknown",
             issue.title,
             issue.explanation,
         )
@@ -73,6 +74,12 @@ def run_review_command(args: argparse.Namespace) -> int:
     result = asyncio.run(
         review_agent.run_review(owner, repo, args.pr, dry_run=args.dry_run)
     )
+    if result["score"] is None:
+        logger.error(
+            "Review failed — no reviewer completed: %s",
+            ", ".join(result["failed_reviewers"]) or "none ran",
+        )
+        return 1
     if args.dry_run:
         _log_findings(result)
     logger.info(

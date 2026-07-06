@@ -20,7 +20,7 @@ Respond with a single JSON object and nothing else, matching exactly this shape:
       "file": "{file_path}",
       "line": <line number in the new version of the file, as an integer>,
       "severity": "one of: critical, high, medium, low",
-      "category": "one of: bug, security, performance, style, error_handling",
+      "category": "one of: {allowed_categories}",
       "title": "short, specific title",
       "explanation": "what the issue is and why it matters",
       "suggestion": "concrete fix, with actual code when possible"
@@ -28,4 +28,4 @@ Respond with a single JSON object and nothing else, matching exactly this shape:
   ]
 }}
 
-Include one object in the "issues" array for every real bug, security problem, performance problem, error-handling gap, or significant style issue in the added or modified lines. If there are no real issues in this chunk, return {{"issues": []}}.
+Include one object in the "issues" array for every real problem within your review focus in the added or modified lines. Only use the categories listed above. If there are no real issues within your focus in this chunk, return {{"issues": []}}.
