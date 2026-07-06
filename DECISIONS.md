@@ -1,18 +1,16 @@
 # Design decisions — multi-agent review pipeline
 
-Decisions made autonomously while converting the single-pass review into
-three focused reviewers plus a synthesis step. Recorded for post-hoc
-review; each entry says what was decided, why, and what was rejected.
+Decisions made while converting the single-pass review into three
+focused reviewers plus a synthesis step. Each entry says what was
+decided, why, and what was rejected.
 
-## D1. Provider: Groq (Llama 3.3), not the Anthropic API
+## D1. Provider: Groq (Llama 3.3)
 
-The task description said each reviewer should have "its own Claude API
-call", but the repository migrated from Anthropic to Groq at HEAD
-(`5892762`) and CLAUDE.md mandates the raw Groq SDK with every LLM call
-in `llm_client.py`. I read "Claude API call" as "its own independent LLM
-call" and kept Groq. Adding an Anthropic dependency back one commit
-after removing it seemed clearly unintended — if literal Claude API
-calls were wanted, only `llm_client.py` and `config.py` need to change.
+The pipeline keeps the raw Groq SDK adopted in the earlier provider
+migration, with every LLM call in `llm_client.py` per the project
+conventions (CONTRIBUTING.md). The reviewer/synthesis architecture is
+provider-agnostic — swapping providers later would touch only
+`llm_client.py` and `config.py`.
 
 ## D2. Reviewer abstraction: data-driven registry, one generic LLM function
 
@@ -21,7 +19,7 @@ name, system-prompt file, allowed categories, default category). One
 generic `llm_client.run_reviewer_analysis(spec, ...)` serves all of them;
 orchestration lives in `agents/reviewers.py`.
 
-**Why:** CLAUDE.md pins constants to `config.py` and LLM calls to
+**Why:** the project conventions pin constants to `config.py` and LLM calls to
 `llm_client.py`. Three near-identical functions would have duplicated
 ~90% of the request/parse code and tripled the test surface. Adding a
 fourth reviewer is now one registry entry plus one prompt file.
@@ -98,8 +96,9 @@ notice instead of a review (never in dry-run; CLI exits 1).
 
 **Why:** a completed security pass is still valuable when the style pass
 hit rate limits; discarding two-thirds of successful work to report
-nothing is strictly worse. **Note:** this deliberately softens commit
-`fbc1049` ("fail review on model refusal instead of passing silently") —
+nothing is strictly worse. **Note:** this deliberately softens the
+earlier fail-on-refusal decision ("fail review on model refusal instead
+of passing silently") —
 the spirit is preserved (failure is always disclosed, never silent) but
 one reviewer's failure is no longer fatal. The per-file failure notices
 were removed because three reviewers could post up to three notices per

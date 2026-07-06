@@ -1,4 +1,4 @@
-# CLAUDE.md
+# Contributing — project conventions
 
 ## Project identity
 PR Sentinel is an autonomous AI code reviewer. When a GitHub pull request

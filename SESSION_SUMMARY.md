@@ -6,30 +6,29 @@ The single-pass review was replaced by a three-reviewer pipeline with a
 synthesis step, in 8 commits on `feature/multi-agent-review` (each one
 leaves the test suite green):
 
-1. `ecc6718` — reviewer registry (`config.REVIEWERS`), `ENABLED_REVIEWERS`
-   env flag, new `architecture`/`testing` categories.
-2. `00d3155` — shared test fixtures consolidated into `tests/conftest.py`.
-3. `13293f8` — per-reviewer system prompts + shared `reviewer_analysis`
-   prompt; generic `llm_client.run_reviewer_analysis` that tags each
-   `CodeIssue` with its reviewer.
-4. `ec4f22b` — `agents/reviewers.py`: reviewers run concurrently
-   (`asyncio.gather`, one in-flight request per reviewer); a failing
-   reviewer keeps its partial findings and never aborts the others.
-5. `30df766` — `agents/synthesis.py`: deterministic merge (agreement
-   collapses, highest severity wins, contributors credited) +
-   disagreement detection; `generate_synthesis_narrative` LLM call for
-   prose only.
-6. `4c041f4` — `run_review` rewired to the pipeline with graceful
-   degradation; comment attribution, partial-review warning and
-   "Reviewers disagreed" summary sections; old single-pass path removed.
-7. `b3f2a93` — DECISIONS.md + README architecture update.
-8. (this commit) — session summary.
+1. Reviewer registry (`config.REVIEWERS`), `ENABLED_REVIEWERS` env flag,
+   new `architecture`/`testing` categories.
+2. Shared test fixtures consolidated into `tests/conftest.py`.
+3. Per-reviewer system prompts + shared `reviewer_analysis` prompt;
+   generic `llm_client.run_reviewer_analysis` that tags each `CodeIssue`
+   with its reviewer.
+4. `agents/reviewers.py`: reviewers run concurrently (`asyncio.gather`,
+   one in-flight request per reviewer); a failing reviewer keeps its
+   partial findings and never aborts the others.
+5. `agents/synthesis.py`: deterministic merge (agreement collapses,
+   highest severity wins, contributors credited) + disagreement
+   detection; `generate_synthesis_narrative` LLM call for prose only.
+6. `run_review` rewired to the pipeline with graceful degradation;
+   comment attribution, partial-review warning and "Reviewers disagreed"
+   summary sections; old single-pass path removed.
+7. DECISIONS.md + README architecture update.
+8. Session summary (this document).
 
 ## Key decisions (full reasoning in DECISIONS.md)
 
-- **Groq, not the Anthropic API** (D1): the request said "Claude API
-  call" but the repo migrated to Groq at HEAD and CLAUDE.md mandates it;
-  I read it as "its own independent LLM call".
+- **Provider** (D1): all reviewer calls use the Groq SDK adopted in the
+  earlier provider migration; the reviewer/synthesis architecture is
+  provider-agnostic.
 - **Hybrid synthesis** (D5): the posted issue list is a pure-Python
   deterministic merge — an LLM never edits it (no hallucinated line
   numbers, full traceability); one LLM call writes the prose overview.
@@ -63,19 +62,18 @@ Also verified beyond the suite: an end-to-end dry-run of the real
 pipeline (real prompts, chunking, synthesis, comment building; only the
 Groq client and GitHub fetches faked) on the committed-secret diff —
 score 74, both conflicting comments render on line 12 with attribution,
-dry-run posts nothing. CLAUDE.md compliance grep-checked: groq/httpx
+dry-run posts nothing. Convention compliance grep-checked: groq/httpx
 imports only in their designated modules, no prints, no bare excepts.
 
 ## What to look at closely before merging
 
-1. **The D6 behaviour change**: commit `fbc1049` made reviews fail on
+1. **The D6 behaviour change**: reviews previously failed outright on
    model refusal; now a single reviewer's failure produces a disclosed
    partial review instead. If you want all-or-nothing back, the gate is
    one condition in `run_review` (`agents/review_agent.py`).
-2. **Provider interpretation (D1)**: reviewers call Groq/Llama 3.3, not
-   the Claude API. If you meant literal Claude API calls, only
-   `llm_client.py` + `config.py` need to change — the reviewer/synthesis
-   architecture is provider-agnostic.
+2. **Provider (D1)**: reviewers call Groq/Llama 3.3. Swapping providers
+   later would only touch `llm_client.py` + `config.py` — the
+   reviewer/synthesis architecture is provider-agnostic.
 3. **Rate limits**: LLM call volume tripled (3 reviewers × files ×
    chunks; ~60 calls at the 20-file cap). Reviewer-level concurrency +
    existing backoff should hold on paid tiers; if TPM limits bite, add a

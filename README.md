@@ -112,5 +112,5 @@ network requests.
 
 ## Project conventions
 
-See [CLAUDE.md](CLAUDE.md) for the code style and architecture rules this
-repository follows.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the code style and architecture
+rules this repository follows.
