@@ -1,21 +1,15 @@
-"""Per-file analysis for PR Sentinel: skip rules, smart chunking, LLM dispatch.
+"""Per-file diff helpers for PR Sentinel: skip rules and smart chunking.
 
 Splits a file's diff into chunks at natural boundaries (function/class
-definitions, then blank lines), sends each chunk to the LLM, and posts a
-failure notice on the PR if analysis fails after retries.
+definitions, then blank lines) for the focused reviewers in
+agents/reviewers.py, and decides which changed files are reviewable.
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import config
-import github_client
-import llm_client
-from llm_client import CodeIssue, ReviewFailedError
-
-logger = logging.getLogger(__name__)
 
 _DIFF_MARKERS = ("+", "-", " ")
 
@@ -97,40 +91,3 @@ def split_diff_into_chunks(patch: str, max_lines: int | None = None) -> list[str
         chunks.append("\n".join(lines[start:end]))
         start = end
     return chunks
-
-
-async def analyze(
-    owner: str,
-    repo: str,
-    pr_number: int,
-    file_info: dict[str, Any],
-    dry_run: bool = False,
-) -> list[CodeIssue]:
-    """Analyse one changed file and return all issues found in it.
-
-    Splits the diff into chunks, sends each chunk to the LLM, and on a
-    ReviewFailedError returns whatever was collected from earlier chunks.
-    Outside dry-run mode a failure also posts a notice on the PR; in
-    dry-run nothing is posted to GitHub.
-    """
-    filename = file_info.get("filename", "")
-    patch = file_info.get("patch") or ""
-    chunks = split_diff_into_chunks(patch)
-    total = len(chunks)
-    issues: list[CodeIssue] = []
-    logger.info("Analyzing %s in %d chunk(s)", filename, total)
-    for number, chunk in enumerate(chunks, start=1):
-        try:
-            issues.extend(
-                await llm_client.analyze_file(
-                    filename, chunk, chunk_number=number, total_chunks=total
-                )
-            )
-        except ReviewFailedError as exc:
-            logger.error("Analysis failed for %s: %s", filename, exc)
-            if dry_run:
-                logger.info("Dry run — not posting failure notice for %s", filename)
-            else:
-                await github_client.post_failed_review(owner, repo, pr_number, filename)
-            break
-    return issues

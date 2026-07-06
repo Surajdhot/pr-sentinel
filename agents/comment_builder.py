@@ -17,9 +17,11 @@ CATEGORY_LABELS: dict[str, str] = {
     "performance": "Performance",
     "style": "Style",
     "error_handling": "Error handling",
+    "architecture": "Architecture",
+    "testing": "Test coverage",
 }
 
-_FOOTER = "*Reviewed by PR Sentinel — powered by Llama 3.3 (Groq)*"
+_FOOTER = "*Reviewed by PR Sentinel — multi-agent review powered by Llama 3.3 (Groq)*"
 
 
 def _issue_body(issue: CodeIssue) -> str:
@@ -32,6 +34,9 @@ def _issue_body(issue: CodeIssue) -> str:
     if issue.suggestion:
         language = detect_language(issue.file)
         body += f"\n**Suggested fix:**\n```{language}\n{issue.suggestion}\n```\n"
+    if issue.reviewer:
+        agreement = "Multiple reviewers agree. " if "," in issue.reviewer else ""
+        body += f"\n*{agreement}Flagged by: {issue.reviewer}*\n"
     return body
 
 
@@ -83,20 +88,58 @@ def _grouped_issue_lines(issues: list[CodeIssue]) -> list[str]:
     return lines
 
 
-def build_summary(issues: list[CodeIssue], score: int, overview: str) -> str:
+def _coverage_lines(failed_reviewers: list[str]) -> list[str]:
+    """Render the warning block for reviewers that did not complete."""
+    if not failed_reviewers:
+        return []
+    names = ", ".join(failed_reviewers)
+    return [
+        f"> ⚠️ **Partial review** — reviewer(s) did not complete: {names}. "
+        "Findings may be incomplete.",
+        "",
+    ]
+
+
+def _disagreement_lines(disagreements: list[dict[str, Any]]) -> list[str]:
+    """List each same-line conflict with every reviewer's claim."""
+    if not disagreements:
+        return []
+    lines = ["### Reviewers disagreed", ""]
+    for record in disagreements:
+        claims = "; ".join(
+            f"{claim['reviewer']}: [{claim['severity'].upper()}] {claim['title']}"
+            for claim in record.get("issues", [])
+        )
+        lines.append(f"- `{record['file']}:{record['line']}` — {claims}")
+    lines.append("")
+    return lines
+
+
+def build_summary(
+    issues: list[CodeIssue],
+    score: int,
+    overview: str,
+    failed_reviewers: list[str] | None = None,
+    disagreements: list[dict[str, Any]] | None = None,
+) -> str:
     """Render the top-level review summary comment.
 
     Args:
-        issues: All deduplicated issues found in the PR.
+        issues: The merged issues found by all reviewers.
         score: The 0-100 review score.
         overview: The AI-generated plain-English summary of the PR.
+        failed_reviewers: Display names of reviewers that did not complete.
+        disagreements: Same-line conflict records from agents.synthesis.
     """
     parts: list[str] = ["## PR Sentinel Review", ""]
+    parts.extend(_coverage_lines(failed_reviewers or []))
     if overview:
         parts.extend([overview, ""])
-    parts.extend([f"**Score: {score}/100**", ""])
+    partial = " (partial)" if failed_reviewers else ""
+    parts.extend([f"**Score: {score}/100{partial}**", ""])
     parts.extend(_severity_table(issues))
     parts.extend(["", "### Issues found", ""])
     parts.extend(_grouped_issue_lines(issues))
+    parts.extend(_disagreement_lines(disagreements or []))
     parts.extend(["---", _FOOTER])
     return "\n".join(parts)
